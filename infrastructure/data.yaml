@@ -1,0 +1,141 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CircuitCare knowledge and durable customer memory resources.
+
+Parameters:
+  ArtifactBucket:
+    Type: String
+  KnowledgePrefix:
+    Type: String
+    Default: knowledge/
+
+Resources:
+  VectorBucket:
+    Type: AWS::S3Vectors::VectorBucket
+    Properties:
+      VectorBucketName: !Sub ai-support-agent-${AWS::AccountId}-${AWS::Region}
+      EncryptionConfiguration:
+        SseType: AES256
+      Tags:
+        - Key: Project
+          Value: ai-support-agent
+
+  VectorIndex:
+    Type: AWS::S3Vectors::Index
+    Properties:
+      VectorBucketArn: !GetAtt VectorBucket.VectorBucketArn
+      IndexName: circuitcare-support
+      DataType: float32
+      Dimension: 1024
+      DistanceMetric: cosine
+      MetadataConfiguration:
+        NonFilterableMetadataKeys:
+          - AMAZON_BEDROCK_TEXT
+
+  KnowledgeBaseRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ai-support-agent-kb-${AWS::Region}
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: bedrock.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: knowledge-ingestion
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: bedrock:InvokeModel
+                Resource: !Sub arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v2:0
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !Sub arn:${AWS::Partition}:s3:::${ArtifactBucket}
+                Condition:
+                  StringLike:
+                    s3:prefix: !Sub ${KnowledgePrefix}*
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub arn:${AWS::Partition}:s3:::${ArtifactBucket}/${KnowledgePrefix}*
+              - Effect: Allow
+                Action:
+                  - s3vectors:GetIndex
+                  - s3vectors:GetVectors
+                  - s3vectors:PutVectors
+                  - s3vectors:DeleteVectors
+                  - s3vectors:QueryVectors
+                Resource: !GetAtt VectorIndex.IndexArn
+
+  KnowledgeBase:
+    Type: AWS::Bedrock::KnowledgeBase
+    Properties:
+      Name: ai-support-agent-kb
+      Description: CircuitCare approved product and support information.
+      RoleArn: !GetAtt KnowledgeBaseRole.Arn
+      KnowledgeBaseConfiguration:
+        Type: VECTOR
+        VectorKnowledgeBaseConfiguration:
+          EmbeddingModelArn: !Sub arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v2:0
+      StorageConfiguration:
+        Type: S3_VECTORS
+        S3VectorsConfiguration:
+          IndexArn: !GetAtt VectorIndex.IndexArn
+      Tags:
+        Project: ai-support-agent
+        Environment: dev
+
+  KnowledgeDataSource:
+    Type: AWS::Bedrock::DataSource
+    Properties:
+      Name: circuitcare-support-documents
+      KnowledgeBaseId: !GetAtt KnowledgeBase.KnowledgeBaseId
+      DataDeletionPolicy: RETAIN
+      DataSourceConfiguration:
+        Type: S3
+        S3Configuration:
+          BucketArn: !Sub arn:${AWS::Partition}:s3:::${ArtifactBucket}
+          InclusionPrefixes: [!Ref KnowledgePrefix]
+      VectorIngestionConfiguration:
+        ChunkingConfiguration:
+          ChunkingStrategy: FIXED_SIZE
+          FixedSizeChunkingConfiguration:
+            MaxTokens: 300
+            OverlapPercentage: 20
+
+  Memory:
+    Type: AWS::BedrockAgentCore::Memory
+    Properties:
+      Name: ai_support_agent_memory
+      Description: Durable CircuitCare customer facts, preferences, and summaries.
+      EventExpiryDuration: 30
+      MemoryStrategies:
+        - SemanticMemoryStrategy:
+            Name: customer_facts
+            Description: Durable customer facts learned during support conversations.
+            NamespaceTemplates: ["circuitcare/{actorId}/facts"]
+        - UserPreferenceMemoryStrategy:
+            Name: customer_preferences
+            Description: Customer communication and product preferences.
+            NamespaceTemplates: ["circuitcare/{actorId}/preferences"]
+        - SummaryMemoryStrategy:
+            Name: conversation_summaries
+            Description: Concise summaries of prior support sessions.
+            NamespaceTemplates: ["circuitcare/{actorId}/{sessionId}/summaries"]
+      Tags:
+        Project: ai-support-agent
+        Environment: dev
+
+Outputs:
+  KnowledgeBaseId:
+    Value: !GetAtt KnowledgeBase.KnowledgeBaseId
+  KnowledgeBaseArn:
+    Value: !GetAtt KnowledgeBase.KnowledgeBaseArn
+  DataSourceId:
+    Value: !GetAtt KnowledgeDataSource.DataSourceId
+  MemoryId:
+    Value: !GetAtt Memory.MemoryId

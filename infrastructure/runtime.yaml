@@ -1,0 +1,134 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CircuitCare AgentCore Runtime, endpoint, and monitoring.
+
+Parameters:
+  ArtifactBucket:
+    Type: String
+  RuntimeCodeKey:
+    Type: String
+  ModelId:
+    Type: String
+    Default: us.amazon.nova-2-lite-v1:0
+  GatewayUrl:
+    Type: String
+  KnowledgeBaseId:
+    Type: String
+  KnowledgeBaseArn:
+    Type: String
+  MemoryId:
+    Type: String
+
+Resources:
+  RuntimeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ai-support-agent-runtime-${AWS::Region}
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: bedrock-agentcore.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: agent-services
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource: "*"
+              - Effect: Allow
+                Action: bedrock:Retrieve
+                Resource: !Ref KnowledgeBaseArn
+              - Effect: Allow
+                Action: bedrock-agentcore:*
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/*
+              - Effect: Allow
+                Action:
+                  - xray:PutTraceSegments
+                  - xray:PutTelemetryRecords
+                Resource: "*"
+
+  Runtime:
+    Type: AWS::BedrockAgentCore::Runtime
+    Properties:
+      AgentRuntimeName: ai_support_agent
+      Description: CircuitCare electronics customer-support agent.
+      RoleArn: !GetAtt RuntimeRole.Arn
+      AgentRuntimeArtifact:
+        CodeConfiguration:
+          Code:
+            S3:
+              Bucket: !Ref ArtifactBucket
+              Prefix: !Ref RuntimeCodeKey
+          Runtime: PYTHON_3_13
+          EntryPoint: [main.py]
+      NetworkConfiguration:
+        NetworkMode: PUBLIC
+      ProtocolConfiguration: HTTP
+      LifecycleConfiguration:
+        IdleRuntimeSessionTimeout: 300
+        MaxLifetime: 1800
+      EnvironmentVariables:
+        AWS_REGION: !Ref AWS::Region
+        MODEL_ID: !Ref ModelId
+        GATEWAY_URL: !Ref GatewayUrl
+        KNOWLEDGE_BASE_ID: !Ref KnowledgeBaseId
+        MEMORY_ID: !Ref MemoryId
+        LOG_LEVEL: INFO
+      Tags:
+        Project: ai-support-agent
+        Environment: dev
+        ManagedBy: CloudFormation
+
+  RuntimeEndpoint:
+    Type: AWS::BedrockAgentCore::RuntimeEndpoint
+    Properties:
+      AgentRuntimeId: !GetAtt Runtime.AgentRuntimeId
+      Name: default
+      Description: Default CircuitCare runtime endpoint.
+
+  RuntimeErrorMetric:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Sub /aws/bedrock-agentcore/runtimes/${Runtime.AgentRuntimeId}-DEFAULT
+      FilterPattern: ERROR
+      MetricTransformations:
+        - MetricNamespace: AiSupportAgent
+          MetricName: RuntimeErrors
+          MetricValue: "1"
+          DefaultValue: 0
+
+  RuntimeErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: ai-support-agent-runtime-errors
+      AlarmDescription: Six or more Runtime errors within five minutes.
+      Namespace: AiSupportAgent
+      MetricName: RuntimeErrors
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 6
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+Outputs:
+  RuntimeId:
+    Value: !GetAtt Runtime.AgentRuntimeId
+  RuntimeArn:
+    Value: !GetAtt Runtime.AgentRuntimeArn
+  RuntimeEndpointArn:
+    Value: !GetAtt RuntimeEndpoint.AgentRuntimeEndpointArn
+  AlarmName:
+    Value: !Ref RuntimeErrorAlarm

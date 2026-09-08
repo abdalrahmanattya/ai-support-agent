@@ -1,0 +1,53 @@
+# Local AI-agent instructions and working context
+AGENTS.md
+AGY.md
+CLAUDE.md
+GEMINI.md
+CHANGELOG.md
+docs/
+scripts/test-context-resume.sh
+scripts/refresh-credentials.sh
+refresh-credentials.sh
+project-starter/
+.agents/
+.claude/
+.codex/
+.cursor/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+.venv/
+*.pem
+*.key
+
+# Operating-system and editor artifacts
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Common generated dependencies and output
+node_modules/
+dist/
+build/
+coverage/
+playwright-report/
+test-results/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Local application state
+data/
+
+# Local assessment material, credentials, tools, and deployment evidence
+rubric.pdf
+temp-creds.txt
+temp-creds.rtf
+.tools/
+.build/
+.evidence/
+agentcore/

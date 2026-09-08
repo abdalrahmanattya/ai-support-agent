@@ -1,0 +1,311 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CircuitCare order and refund tools exposed through AgentCore Gateway.
+
+Parameters:
+  ArtifactBucket:
+    Type: String
+  OrderCodeKey:
+    Type: String
+  RefundCodeKey:
+    Type: String
+
+Resources:
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ai-support-agent-lambda-${AWS::Region}
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: logs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/ai-support-agent-*:*
+
+  OrderFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: ai-support-agent-orders
+      Runtime: python3.13
+      Architectures: [arm64]
+      Handler: lambdas.order_tracker.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 10
+      MemorySize: 256
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Ref OrderCodeKey
+      Tags:
+        - Key: Project
+          Value: ai-support-agent
+
+  RefundFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: ai-support-agent-refunds
+      Runtime: python3.13
+      Architectures: [arm64]
+      Handler: lambdas.refund_processor.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 10
+      MemorySize: 256
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Ref RefundCodeKey
+      Tags:
+        - Key: Project
+          Value: ai-support-agent
+
+  SupportApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: ai-support-agent-orders
+      Description: IAM-authorized CircuitCare order lookup API.
+      EndpointConfiguration:
+        Types: [REGIONAL]
+
+  OrdersResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref SupportApi
+      ParentId: !GetAtt SupportApi.RootResourceId
+      PathPart: orders
+
+  OrderIdResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref SupportApi
+      ParentId: !Ref OrdersResource
+      PathPart: "{order_id}"
+
+  CustomersResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref SupportApi
+      ParentId: !GetAtt SupportApi.RootResourceId
+      PathPart: customers
+
+  CustomerIdResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref SupportApi
+      ParentId: !Ref CustomersResource
+      PathPart: "{customer_id}"
+
+  CustomerOrdersResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref SupportApi
+      ParentId: !Ref CustomerIdResource
+      PathPart: orders
+
+  OrderMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref SupportApi
+      ResourceId: !Ref OrderIdResource
+      HttpMethod: GET
+      AuthorizationType: AWS_IAM
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${OrderFunction.Arn}/invocations
+      MethodResponses:
+        - StatusCode: "200"
+
+  CustomerMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref SupportApi
+      ResourceId: !Ref CustomerIdResource
+      HttpMethod: GET
+      AuthorizationType: AWS_IAM
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${OrderFunction.Arn}/invocations
+      MethodResponses:
+        - StatusCode: "200"
+
+  CustomerOrdersMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref SupportApi
+      ResourceId: !Ref CustomerOrdersResource
+      HttpMethod: GET
+      AuthorizationType: AWS_IAM
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${OrderFunction.Arn}/invocations
+      MethodResponses:
+        - StatusCode: "200"
+
+  ApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: [OrderMethod, CustomerMethod, CustomerOrdersMethod]
+    Properties:
+      RestApiId: !Ref SupportApi
+
+  ApiStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      RestApiId: !Ref SupportApi
+      DeploymentId: !Ref ApiDeployment
+      StageName: dev
+      TracingEnabled: true
+
+  ApiInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref OrderFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${SupportApi}/*/GET/*
+
+  GatewayRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ai-support-agent-gateway-${AWS::Region}
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: bedrock-agentcore.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: invoke-targets
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: execute-api:Invoke
+                Resource: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${SupportApi}/dev/GET/*
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt RefundFunction.Arn
+
+  Gateway:
+    Type: AWS::BedrockAgentCore::Gateway
+    Properties:
+      Name: ai-support-agent-gateway
+      Description: MCP gateway for CircuitCare operational support tools.
+      RoleArn: !GetAtt GatewayRole.Arn
+      AuthorizerType: AWS_IAM
+      ProtocolType: MCP
+      ProtocolConfiguration:
+        Mcp:
+          Instructions: Use order tools for customer and shipment facts and refund tools for simulated return operations.
+          SupportedVersions: ["2025-03-26"]
+      Tags:
+        Project: ai-support-agent
+        Environment: dev
+        ManagedBy: CloudFormation
+
+  OrderGatewayTarget:
+    Type: AWS::BedrockAgentCore::GatewayTarget
+    DependsOn: ApiStage
+    Properties:
+      GatewayIdentifier: !GetAtt Gateway.GatewayIdentifier
+      Name: OrderApi
+      Description: IAM-authorized order and customer lookup tools.
+      CredentialProviderConfigurations:
+        - CredentialProviderType: GATEWAY_IAM_ROLE
+      TargetConfiguration:
+        Mcp:
+          ApiGateway:
+            RestApiId: !Ref SupportApi
+            Stage: dev
+            ApiGatewayToolConfiguration:
+              ToolFilters:
+                - FilterPath: /orders/{order_id}
+                  Methods: [GET]
+                - FilterPath: /customers/{customer_id}
+                  Methods: [GET]
+                - FilterPath: /customers/{customer_id}/orders
+                  Methods: [GET]
+              ToolOverrides:
+                - Path: /orders/{order_id}
+                  Method: GET
+                  Name: get_order_status
+                  Description: Get the authoritative status and tracking details for one order.
+                - Path: /customers/{customer_id}
+                  Method: GET
+                  Name: get_customer_profile
+                  Description: Get one customer profile and loyalty balance.
+                - Path: /customers/{customer_id}/orders
+                  Method: GET
+                  Name: list_customer_orders
+                  Description: List all known orders for one customer.
+
+  RefundGatewayTarget:
+    Type: AWS::BedrockAgentCore::GatewayTarget
+    Properties:
+      GatewayIdentifier: !GetAtt Gateway.GatewayIdentifier
+      Name: RefundLambda
+      Description: Validated simulated refund and return-label tools.
+      CredentialProviderConfigurations:
+        - CredentialProviderType: GATEWAY_IAM_ROLE
+      TargetConfiguration:
+        Mcp:
+          Lambda:
+            LambdaArn: !GetAtt RefundFunction.Arn
+            ToolSchema:
+              InlinePayload:
+                - Name: initiate_refund
+                  Description: Initiate a simulated refund for an order and amount.
+                  InputSchema:
+                    Type: object
+                    Properties:
+                      order_id: {Type: string, Description: Order identifier such as ORD-002}
+                      amount: {Type: number, Description: Positive refund amount in USD}
+                      reason: {Type: string, Description: Customer-provided refund reason}
+                    Required: [order_id, amount, reason]
+                  OutputSchema:
+                    Type: object
+                    Properties:
+                      refund_id: {Type: string}
+                      order_id: {Type: string}
+                      status: {Type: string}
+                      amount: {Type: number}
+                      message: {Type: string}
+                      created_at: {Type: string}
+                    Required: [refund_id, order_id, status, amount, message, created_at]
+                - Name: check_refund_status
+                  Description: Check the simulated processing status of a refund.
+                  InputSchema:
+                    Type: object
+                    Properties:
+                      refund_id: {Type: string, Description: Refund identifier}
+                    Required: [refund_id]
+                - Name: get_return_label
+                  Description: Generate a simulated prepaid return-label URL for an order.
+                  InputSchema:
+                    Type: object
+                    Properties:
+                      order_id: {Type: string, Description: Order identifier}
+                    Required: [order_id]
+
+Outputs:
+  GatewayUrl:
+    Value: !GetAtt Gateway.GatewayUrl
+  GatewayIdentifier:
+    Value: !GetAtt Gateway.GatewayIdentifier
+  OrderApiId:
+    Value: !Ref SupportApi
+  OrderFunctionArn:
+    Value: !GetAtt OrderFunction.Arn
+  RefundFunctionArn:
+    Value: !GetAtt RefundFunction.Arn
