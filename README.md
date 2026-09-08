@@ -4,8 +4,6 @@ CircuitCare is a complete customer-support application for a fictional electroni
 
 The important idea is simple: the AI can explain and assist, but trusted application rules—not the AI—decide what a customer may see or change.
 
-> **Current status:** CircuitCare is not online as a public service. The complete system was deployed to Amazon Web Services (AWS), tested successfully with fictional users and data, and then removed to avoid ongoing cloud costs. It can be deployed again and used from a local computer.
-
 ## The 30-second overview
 
 Imagine a customer who has bought electronics from CircuitCare:
@@ -106,34 +104,17 @@ You do not need to know these services to understand the project. Each one has a
 | CloudFormation | Describes the AWS environment as reviewable files so it can be created and removed consistently. |
 | GitHub Actions | Repeats the automated tests, code-quality checks, and builds after changes are pushed. |
 
-## Cloud resources and current deployment status
+## AWS cloud resources architecture diagram
 
-The AWS environment is divided into five groups so each area has a clear purpose and can be removed independently:
+The website and trusted API run on the operator's computer. They connect to AWS services for identity, business records, AI capabilities, controlled tools, permissions, and monitoring.
 
-```mermaid
-flowchart TB
-  Status[Current state: all AWS resources removed]
-  Identity[Identity group<br/>sign-in and staff roles]
-  Bootstrap[Artifact group<br/>private deployment files]
-  Data[Data group<br/>records, approved knowledge, and memory]
-  Tools[Tools group<br/>restricted backend capabilities]
-  Runtime[AI runtime group<br/>assistant, endpoint, and monitoring]
-  Bootstrap --> Data
-  Bootstrap --> Tools
-  Bootstrap --> Runtime
-  Identity --> App[Application running on a local computer]
-  Data --> App
-  Runtime --> App
-  Status -. describes .-> Identity
-  Status -. describes .-> Bootstrap
-  Status -. describes .-> Data
-  Status -. describes .-> Tools
-  Status -. describes .-> Runtime
-```
+![CircuitCare AWS service architecture diagram with official AWS service icons](docs/images/aws-architecture.png)
 
-As of 2026-09-08, none of these resources is deployed. During the latest validation cycle, the five groups were created in the AWS `us-east-1` region, tested together, and removed afterward. The website and its trusted API are intentionally designed to run on a local computer rather than as a permanently hosted service.
+The diagram uses the [official AWS Architecture Icons](https://aws.amazon.com/architecture/icons/). Solid arrows show application requests; dashed arrows show permissions, monitoring, and repeatable deployment configuration.
 
-The diagram contains only resources that were actually deployed and verified during that cycle. It does not mix planned resources with deployment evidence, and no additional AWS components are currently planned or presented as available.
+The main path is straightforward: the local server uses Cognito to verify identity, DynamoDB to read and write business records, and AgentCore to run the assistant. AgentCore reaches Bedrock for language and approved-knowledge search, while Gateway, Lambda, and API Gateway provide narrowly controlled tools. IAM limits service permissions, CloudWatch records operational signals, and CloudFormation creates the environment consistently.
+
+The diagram reflects the verified deployment and contains no planned-only services. To use CircuitCare, an operator deploys an independent AWS environment in their own account and runs the website locally. The same architecture was deployed and tested end to end in `us-east-1` on 2026-09-08; this repository does not point to a shared demo environment.
 
 ## What was tested
 
@@ -177,7 +158,7 @@ CircuitCare is a bounded reference application, not a live retail service.
 - It does not connect to a real customer-support platform.
 - Demo users must be created by the operator after deployment.
 - The application depends on AWS for live AI responses; it has no simulated AI backend.
-- It has no availability commitment because the AWS resources are normally offline.
+- Each operator supplies and manages the AWS environment used by their local application.
 - A short validation cycle cannot demonstrate the long-term reliability, scale, or cost of a production service.
 
 ## Running the project locally with AWS
