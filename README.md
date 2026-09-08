@@ -1,3 +1,5 @@
+<!-- reader-first-readme:v1 -->
+
 # CircuitCare AI Support
 
 CircuitCare is a complete customer-support application for a fictional electronics retailer. It combines an AI assistant with familiar support features: secure sign-in, order history, return requests, safety escalations, and a staff case queue.
