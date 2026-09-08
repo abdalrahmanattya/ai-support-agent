@@ -56,15 +56,36 @@ The diagram shows currently deployed resources; no planned resources are present
 
 ### Prerequisites and credentials
 
-Use AWS CLI v2, Python 3.13, `uv`, and AWS access that can assume the deployment role. Node.js is only needed for the optional official AgentCore CLI. Source the local ignored credential helper:
+Install the following locally:
+
+- AWS CLI v2
+- Python 3.13 with `pip`
+- Bash, `zip`, `jq`, `shasum`, and `uuidgen`
+- AWS permissions for CloudFormation, IAM, Bedrock, AgentCore, S3, S3 Vectors,
+  Lambda, API Gateway, and CloudWatch
+
+Clone the repository and build the local environment and deployment artifacts:
 
 ```bash
-source <(./refresh-credentials.sh)
+git clone https://github.com/abdalrahmanattya/ai-support-agent.git
+cd ai-support-agent
+./scripts/build.sh
 ```
 
-It obtains temporary role credentials without writing them into the repository.
-Set `EXPECTED_AWS_ACCOUNT_ID` and `EXPECTED_AWS_ROLE_NAME` when you want the
-preflight script to enforce a specific deployment identity.
+The build script installs `uv` under `.tools/`, synchronizes `.venv/`, and builds
+Python 3.13 ARM64 deployment archives. Configure the AWS CLI with your own
+profile or temporary credentials, then select the required region:
+
+```bash
+export AWS_PROFILE=your-deployment-profile
+export AWS_REGION=us-east-1
+export AWS_DEFAULT_REGION=us-east-1
+aws sts get-caller-identity
+```
+
+Omit `AWS_PROFILE` when temporary credentials are already exported. Optionally
+set `EXPECTED_AWS_ACCOUNT_ID` and `EXPECTED_AWS_ROLE_NAME` to make the preflight
+script reject an unexpected deployment identity.
 
 ### Deploy and update
 
@@ -87,12 +108,9 @@ That command updates only the Runtime stack.
 ./scripts/invoke.sh "Where is order ORD-001?" CUST-001
 ```
 
-The current official Node CLI also works after installing `@aws/agentcore` and registering the CloudFormation-managed runtime in ignored local `agentcore/` state:
-
-```bash
-agentcore invoke --runtime ai_support_agent --target development \
-  --prompt "What can CircuitCare help with?" --user-id CUST-001 --json
-```
+The official AgentCore CLI can also invoke the runtime after the user registers
+the CloudFormation-managed runtime in account-local AgentCore CLI state. That
+state is intentionally not included because it contains deployment identifiers.
 
 ### Validate
 
@@ -101,6 +119,47 @@ agentcore invoke --runtime ai_support_agent --target development \
 .venv/bin/ruff check .
 .venv/bin/mypy main.py support_agent lambdas
 .venv/bin/cfn-lint infrastructure/*.yaml
+```
+
+### Remove the deployment
+
+Capture the retained artifact bucket name before deleting the stacks, then
+remove the stacks in dependency order:
+
+```bash
+artifact_bucket="$(aws cloudformation describe-stacks \
+  --region us-east-1 \
+  --stack-name ai-support-agent-bootstrap \
+  --query 'Stacks[0].Outputs[?OutputKey==`ArtifactBucketName`].OutputValue' \
+  --output text)"
+
+for stack in runtime tools data bootstrap; do
+  aws cloudformation delete-stack \
+    --region us-east-1 \
+    --stack-name "ai-support-agent-${stack}"
+  aws cloudformation wait stack-delete-complete \
+    --region us-east-1 \
+    --stack-name "ai-support-agent-${stack}"
+done
+```
+
+The versioned artifact bucket is retained intentionally. After confirming its
+artifacts and knowledge document are no longer needed, delete all object
+versions and delete markers, then delete the bucket:
+
+```bash
+delete_manifest="$(mktemp)"
+aws s3api list-object-versions --bucket "${artifact_bucket}" \
+  | jq '{Objects: ([.Versions[]?, .DeleteMarkers[]?]
+      | map({Key, VersionId})), Quiet: true}' >"${delete_manifest}"
+
+if jq -e '.Objects | length > 0' "${delete_manifest}" >/dev/null; then
+  aws s3api delete-objects \
+    --bucket "${artifact_bucket}" \
+    --delete "file://${delete_manifest}"
+fi
+aws s3api delete-bucket --bucket "${artifact_bucket}" --region us-east-1
+rm "${delete_manifest}"
 ```
 
 ## Repository layout
@@ -115,8 +174,8 @@ agentcore invoke --runtime ai_support_agent --target development \
 
 ## Security and limitations
 
-Gateway and Runtime use IAM authorization; no unauthenticated customer endpoint is created. Browser instructions prohibit purchases, logins, and transactions. Credentials, account-local CLI state, evidence, builds, and agent instructions are excluded from Git.
+Gateway and Runtime use IAM authorization; no unauthenticated customer endpoint is created. The agent prompt instructs the Browser tool not to perform purchases, logins, or transactions, but this is a behavioral policy rather than a hard authorization boundary. Credentials, account-local CLI state, evidence, builds, and agent instructions are excluded from Git.
 
 This is a backend reference service, not a chat UI. Business data and actions are simulated, human escalation has no ticketing integration, and the knowledge corpus is small. Production use would also require privacy review, evaluations, rate limits, abuse controls, and a formal retention policy.
 
-Deployed resources may incur charges for inference, Runtime, Memory, Gateway, Browser, Code Interpreter, Knowledge Base, S3/S3 Vectors, Lambda, API Gateway, and CloudWatch. Delete the four stacks when no longer needed. The retained artifact bucket must be emptied and removed separately only after confirming its contents are no longer required.
+Deployed resources may incur charges for inference, Runtime, Memory, Gateway, Browser, Code Interpreter, Knowledge Base, S3/S3 Vectors, Lambda, API Gateway, and CloudWatch. Delete the four stacks and retained artifact bucket when they are no longer needed.
