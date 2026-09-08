@@ -50,3 +50,9 @@ def test_refund_rejects_nonpositive_amount() -> None:
     response = refund_handler({"order_id": "ORD-002", "amount": 0}, _context("initiate_refund"))
     assert response["statusCode"] == 400
     assert json.loads(response["body"])["code"] == "VALIDATION_ERROR"
+
+
+def test_support_hours_are_public_and_deterministic() -> None:
+    response = refund_handler({}, _context("get_support_hours"))
+    assert response["statusCode"] == 200
+    assert "Monday" in json.loads(response["body"])["hours"]

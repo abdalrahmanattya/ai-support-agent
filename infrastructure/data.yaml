@@ -9,6 +9,33 @@ Parameters:
     Default: knowledge/
 
 Resources:
+  BusinessTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      TableName: ai-support-agent-business
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Project
+          Value: ai-support-agent
+        - Key: Environment
+          Value: dev
+
   VectorBucket:
     Type: AWS::S3Vectors::VectorBucket
     Properties:
@@ -131,6 +158,8 @@ Resources:
         Environment: dev
 
 Outputs:
+  BusinessTableName:
+    Value: !Ref BusinessTable
   KnowledgeBaseId:
     Value: !GetAtt KnowledgeBase.KnowledgeBaseId
   KnowledgeBaseArn:

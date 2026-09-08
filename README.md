@@ -1,209 +1,98 @@
-# CircuitCare AI Support Agent
+# CircuitCare AI Support
 
-CircuitCare is an AWS-native support agent for an electronics retailer. It answers grounded product and policy questions, retrieves customer and order facts, simulates bounded support operations, remembers customer preferences across sessions, and uses isolated computation when arithmetic is required.
+CircuitCare is a customer-support application for a fictional electronics retailer. Customers can ask grounded product questions, view their orders, request eligible returns, and follow cases escalated to a support specialist. A focused staff queue completes the escalation journey.
 
 ## Purpose and usefulness
 
-The service is useful for resolving repetitive support requests with approved information while keeping business actions behind controlled, typed tool interfaces.
+The application is useful for showing how an AI assistant can sit beside authoritative business workflows without controlling their security or transaction rules. The scenario and records are fictional.
 
 ## Capabilities
 
-- Grounded answers from an Amazon Bedrock Knowledge Base backed by S3 and S3 Vectors.
-- Order/customer lookups and validated refund operations through AgentCore Gateway targets.
-- Cross-session preferences and summaries through AgentCore Memory.
-- Loyalty calculations and public documentation research in managed Code Interpreter and Browser sandboxes.
-- Strict Pydantic request/tool-result contracts and automatic conversation summarization.
+- Responsive customer portal with support chat, orders, returns, and cases.
+- Staff queue for reviewing and resolving escalations.
+- Grounded answers from an Amazon Bedrock Knowledge Base.
+- Amazon Bedrock AgentCore Runtime, Memory, Browser, and Code Interpreter integrations.
+- Cognito sign-in with seeded customer and staff identities.
+- DynamoDB persistence, ownership checks, return-policy enforcement, explicit confirmation, idempotency, and audit events.
+- Repeatable local checks and a bounded live AWS evaluation suite.
 
-The implementation uses Amazon Nova 2 Lite through Bedrock and the Strands Agents SDK. The CircuitCare scenario and operational data are fictional.
-
-## How it works: system architecture diagram
+## System architecture diagram
 
 ```mermaid
 flowchart LR
-  User[Support client] --> Runtime[AgentCore Runtime]
-  Runtime --> Nova[Bedrock / Nova 2 Lite]
+  Browser[Local React portal] --> API[Local FastAPI server]
+  API --> Cognito[Amazon Cognito]
+  API --> Data[DynamoDB business records]
+  API --> Runtime[AgentCore Runtime]
+  Runtime --> Model[Amazon Bedrock model]
+  Runtime --> KB[Bedrock Knowledge Base]
   Runtime --> Memory[AgentCore Memory]
   Runtime --> Gateway[AgentCore Gateway]
-  Runtime --> KB[Bedrock Knowledge Base]
-  Runtime --> Code[Code Interpreter]
-  Runtime --> Browser[Browser]
-  Gateway --> Orders[API Gateway / Order Lambda]
-  Gateway --> Refunds[Refund Lambda]
-  KB --> Vectors[S3 Vectors]
-  KB --> Docs[S3 support content]
+  Runtime --> Sandboxes[Browser and Code Interpreter]
+  Gateway --> Tools[Lambda and API Gateway tools]
 ```
 
-Runtime hosts the Python agent; Bedrock supplies language reasoning; the Knowledge Base supplies approved context; and Gateway controls access to business APIs. Memory restores relevant cross-session context. Browser and Code Interpreter isolate browsing and computation in AWS-managed sessions. Tool and invocation data are validated before use, and older conversation history is summarized when it reaches 70% of the configured context budget.
+The FastAPI server verifies the signed-in identity and performs all authoritative business operations. The model may explain an outcome, but it cannot approve a return, select another customer's records, or change case state. AWS credentials remain in the local server process.
 
-## Cloud resources and deployment method
-
-The last deployed architecture separated infrastructure by lifecycle and failure
-domain:
+## Cloud resources diagram
 
 ```mermaid
 flowchart TB
-  Bootstrap[bootstrap stack / artifact bucket] --> Data[data stack / KB, vectors, memory]
-  Bootstrap --> Tools[tools stack / gateway, API, Lambdas]
-  Bootstrap --> Runtime[runtime stack / runtime, endpoint, alarm]
+  Identity[Cognito identity stack]
+  Bootstrap[Artifact stack]
+  Data[Knowledge, memory, DynamoDB stack]
+  Tools[Gateway and tools stack]
+  Runtime[Agent runtime stack]
+  Bootstrap --> Data
+  Bootstrap --> Tools
+  Bootstrap --> Runtime
   Data --> Runtime
   Tools --> Runtime
+  Identity --> Portal[Local portal]
+  Data --> Portal
+  Runtime --> Portal
 ```
 
-The four templates are independently deployable. A runtime failure therefore does not recreate the long-lived knowledge, memory, or tool resources. The artifact bucket is private, encrypted, versioned, and retained by CloudFormation.
+No resources are currently deployed. The complete application was exercised on AWS and removed on 2026-09-08 after the validation cycle described below.
 
-On 2026-09-08, all four `ai-support-agent-*` stacks were removed from
-`us-east-1`, together with the retained artifact bucket and service-created log
-groups. No project cloud resources are currently deployed. Before teardown,
-knowledge ingestion and live Runtime, Gateway, Knowledge Base, Memory, Browser,
-Code Interpreter, and AgentCore CLI checks succeeded; the preserved verification
-records document that deployment rather than current availability.
+## Local development
 
-No resources are currently deployed; any planned redeployment must use the
-documented deployment procedure and a separately authorized AWS environment.
-
-The diagram shows the previously verified deployment architecture. It is not a
-claim that those resources are currently deployed.
-
-## Live verification
-
-See [LIVE_TEST_LOG.md](LIVE_TEST_LOG.md) for sanitized transcripts of successful
-AgentCore CLI, Gateway API, Gateway Lambda, Browser, cross-session Memory,
-Knowledge Base, and Code Interpreter invocations. Design decisions, a concrete
-deployment challenge, and production considerations are documented in
-[REFLECTION.md](REFLECTION.md).
-
-Visual evidence:
-
-- [AgentCore CLI invocation](verification/agentcore-cli.png)
-- [API- and Lambda-backed Gateway tools](verification/gateway-tools.png)
-- [Browser live-page retrieval](verification/browser-live-page.png)
-- [Cross-session Memory recall](verification/memory-cross-session.png)
-
-### Prerequisites and credentials
-
-Install the following locally:
-
-- AWS CLI v2
-- Python 3.13 with `pip`
-- Bash, `zip`, `jq`, `shasum`, and `uuidgen`
-- AWS permissions for CloudFormation, IAM, Bedrock, AgentCore, S3, S3 Vectors,
-  Lambda, API Gateway, and CloudWatch
-
-Clone the repository and build the local environment and deployment artifacts:
+Requirements are Python 3.13, Node.js 22, AWS CLI v2, Bash, `zip`, `jq`, `shasum`, and `uuidgen`.
 
 ```bash
-git clone https://github.com/abdalrahmanattya/ai-support-agent.git
-cd ai-support-agent
 ./scripts/build.sh
-```
-
-The build script installs `uv` under `.tools/`, synchronizes `.venv/`, and builds
-Python 3.13 ARM64 deployment archives. Configure the AWS CLI with your own
-profile or temporary credentials, then select the required region:
-
-```bash
-export AWS_PROFILE=your-deployment-profile
-export AWS_REGION=us-east-1
-export AWS_DEFAULT_REGION=us-east-1
-aws sts get-caller-identity
-```
-
-Omit `AWS_PROFILE` when temporary credentials are already exported. Optionally
-set `EXPECTED_AWS_ACCOUNT_ID` and `EXPECTED_AWS_ROLE_NAME` to make the preflight
-script reject an unexpected deployment identity.
-
-### Deploy and update
-
-```bash
-./scripts/preflight.sh
-./scripts/deploy.sh
-```
-
-The script builds ARM64/Python 3.13 artifacts, deploys stacks in dependency order, uploads support content, and waits for ingestion. For application-only changes:
-
-```bash
-./scripts/deploy-runtime.sh
-```
-
-That command updates only the Runtime stack.
-
-### Invoke
-
-```bash
-./scripts/invoke.sh "Where is order ORD-001?" CUST-001
-```
-
-The official AgentCore CLI can also invoke the runtime after the user registers
-the CloudFormation-managed runtime in account-local AgentCore CLI state. That
-state is intentionally not included because it contains deployment identifiers.
-
-### Validate
-
-```bash
 .venv/bin/pytest -q
 .venv/bin/ruff check .
-.venv/bin/mypy main.py support_agent lambdas
+.venv/bin/mypy main.py support_agent lambdas domain apps/api
 .venv/bin/cfn-lint infrastructure/*.yaml
+cd apps/web && npm test && npm run lint && npm run build
 ```
 
-### Remove the deployment
+The portal deliberately connects to AWS and has no simulated agent backend. After an authorized deployment, copy `.env.example` to `.env.local`, fill it from CloudFormation outputs, generate a strong local `SESSION_SECRET`, build the frontend, and run `./scripts/dev.sh`. Open `http://127.0.0.1:8000`.
 
-Capture the retained artifact bucket name before deleting the stacks, then
-remove the stacks in dependency order:
+See [development setup](docs/development-guide.md) for deployment, seeding, evaluation, and teardown steps.
 
-```bash
-artifact_bucket="$(aws cloudformation describe-stacks \
-  --region us-east-1 \
-  --stack-name ai-support-agent-bootstrap \
-  --query 'Stacks[0].Outputs[?OutputKey==`ArtifactBucketName`].OutputValue' \
-  --output text)"
+## Exact deployment method and status
 
-for stack in runtime tools data bootstrap; do
-  aws cloudformation delete-stack \
-    --region us-east-1 \
-    --stack-name "ai-support-agent-${stack}"
-  aws cloudformation wait stack-delete-complete \
-    --region us-east-1 \
-    --stack-name "ai-support-agent-${stack}"
-done
-```
+As of 2026-09-08, no CircuitCare AWS resources are deployed. The latest verification run created five CloudFormation stacks in `us-east-1`—identity, bootstrap, data, tools, and runtime—while the web application and API ran locally. The stacks and retained artifacts were removed after the checks passed.
 
-The versioned artifact bucket is retained intentionally. After confirming its
-artifacts and knowledge document are no longer needed, delete all object
-versions and delete markers, then delete the bucket:
+The diagrams show the verified design and clearly mark its current offline state; no planned resource is presented as deployed.
 
-```bash
-delete_manifest="$(mktemp)"
-aws s3api list-object-versions --bucket "${artifact_bucket}" \
-  | jq '{Objects: ([.Versions[]?, .DeleteMarkers[]?]
-      | map({Key, VersionId})), Quiet: true}' >"${delete_manifest}"
-
-if jq -e '.Objects | length > 0' "${delete_manifest}" >/dev/null; then
-  aws s3api delete-objects \
-    --bucket "${artifact_bucket}" \
-    --delete "file://${delete_manifest}"
-fi
-aws s3api delete-bucket --bucket "${artifact_bucket}" --region us-east-1
-rm "${delete_manifest}"
-```
-
-## Repository layout
-
-- `main.py` assembles the runtime agent.
-- `support_agent/` contains contracts and native-service integrations.
-- `lambdas/` contains fictional business tools.
-- `knowledge/` contains ingested support content.
-- `infrastructure/` contains the four CloudFormation templates.
-- `scripts/` automates build, deployment, and invocation.
-- `tests/` verifies contracts, tools, memory compatibility, and handlers.
+Deployment and teardown are manual, bounded operations. They require an AWS identity with the permissions checked by `scripts/preflight.sh` and may incur charges. [AWS architecture and operations](docs/architecture.md) documents the resources and lifecycle.
 
 ## Security and limitations
 
-Gateway and Runtime use IAM authorization; no unauthenticated customer endpoint is created. The agent prompt instructs the Browser tool not to perform purchases, logins, or transactions, but this is a behavioral policy rather than a hard authorization boundary. Credentials, account-local CLI state, evidence, builds, and agent instructions are excluded from Git.
+Cognito registration is disabled and demo users are seeded by an operator. Customer access is derived from verified identity claims; missing and cross-customer records use non-enumerating errors. Return changes use an explicit proposal/confirmation boundary and idempotency keys. Browser activity is restricted to informational research, and deterministic code owns money and policy decisions.
 
-This is a backend reference service, not a chat UI. Business data and actions are simulated, human escalation has no ticketing integration, and the knowledge corpus is small. Production use would also require privacy review, evaluations, rate limits, abuse controls, and a formal retention policy.
+This bounded reference application does not move money, contact carriers, send notifications, or integrate with a real ticketing system. The dataset and knowledge corpus are intentionally small. It has no availability commitment because it is normally offline. See the [security model](docs/security.md) and [validation criteria](docs/validation.md).
 
-A future deployment may incur charges for inference, Runtime, Memory, Gateway,
-Browser, Code Interpreter, Knowledge Base, S3/S3 Vectors, Lambda, API Gateway,
-and CloudWatch. Use the ordered removal procedure above when it is no longer
-needed.
+## Repository layout
+
+- `apps/web` — React customer portal and staff queue.
+- `apps/api` — local authenticated API and AgentCore client.
+- `domain` — business records, rules, DynamoDB adapter, and fixtures.
+- `support_agent` — agent orchestration and managed-service integrations.
+- `infrastructure` — independently deployable CloudFormation stacks.
+- `evals` and `tests` — live scenarios and deterministic checks.
+
+Licensed under the MIT License.

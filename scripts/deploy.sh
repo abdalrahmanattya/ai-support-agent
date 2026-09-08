@@ -12,6 +12,15 @@ mkdir -p "${evidence_dir}"
 
 aws cloudformation deploy \
   --region "${region}" \
+  --stack-name ai-support-agent-identity \
+  --template-file "${project_dir}/infrastructure/identity.yaml" \
+  --no-fail-on-empty-changeset
+
+aws cloudformation describe-stacks --region "${region}" --stack-name ai-support-agent-identity \
+  --query 'Stacks[0].Outputs' --output json >"${evidence_dir}/identity-outputs.json"
+
+aws cloudformation deploy \
+  --region "${region}" \
   --stack-name ai-support-agent-bootstrap \
   --template-file "${project_dir}/infrastructure/bootstrap.yaml" \
   --no-fail-on-empty-changeset
@@ -77,7 +86,7 @@ aws cloudformation deploy \
 
 aws cloudformation describe-stacks --region "${region}" --stack-name ai-support-agent-runtime \
   --query 'Stacks[0].Outputs' --output json >"${evidence_dir}/runtime-outputs.json"
-jq -s 'add' "${evidence_dir}/data-outputs.json" "${evidence_dir}/tools-outputs.json" \
+jq -s 'add' "${evidence_dir}/identity-outputs.json" "${evidence_dir}/data-outputs.json" "${evidence_dir}/tools-outputs.json" \
   "${evidence_dir}/runtime-outputs.json" >"${evidence_dir}/stack-outputs.json"
 
 job_id="$(aws bedrock-agent start-ingestion-job --region "${region}" \
@@ -94,5 +103,6 @@ while true; do
   esac
 done
 
-echo "Four-stack deployment and knowledge ingestion completed."
+echo "Five-stack deployment and knowledge ingestion completed."
 echo "Combined outputs: ${evidence_dir}/stack-outputs.json"
+echo "Run scripts/seed.py with the UserPoolId and BusinessTableName outputs to create demo data."

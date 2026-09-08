@@ -1,0 +1,1 @@
+"""CircuitCare application entrypoints."""

@@ -4,7 +4,9 @@ AGY.md
 CLAUDE.md
 GEMINI.md
 CHANGELOG.md
-docs/
+docs/project-journal.md
+docs/reflection.md
+docs/decisions/
 scripts/test-context-resume.sh
 scripts/refresh-credentials.sh
 refresh-credentials.sh
@@ -35,6 +37,7 @@ build/
 coverage/
 playwright-report/
 test-results/
+*.tsbuildinfo
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -42,6 +45,7 @@ __pycache__/
 
 # Local application state
 data/
+.env.local
 
 # Local assessment material, credentials, tools, and deployment evidence
 rubric.pdf
@@ -51,3 +55,5 @@ temp-creds.rtf
 .build/
 .evidence/
 agentcore/
+examples/
+local_ui/

@@ -13,8 +13,8 @@ from pydantic import ValidationError
 from strands import Agent
 from strands.agent.conversation_manager import SummarizingConversationManager
 from strands.models import BedrockModel
-from strands_tools.browser import AgentCoreBrowser
 
+from support_agent.browser import ApprovedBrowser
 from support_agent.config import settings
 from support_agent.gateway import build_mcp_client
 from support_agent.memory import MemoryHook, session_messages
@@ -67,7 +67,7 @@ async def invoke(payload, context=None):
             memory_client, settings.memory_id, customer_id, session_id
         )
 
-    browser = AgentCoreBrowser(region=settings.region)
+    browser = ApprovedBrowser(region=settings.region)
     tools = [search_knowledge_base, calculate_loyalty_discount, browser.browser]
     conversation_manager = SummarizingConversationManager(
         summary_ratio=0.3,
@@ -79,7 +79,11 @@ async def invoke(payload, context=None):
         if settings.gateway_url:
             client = build_mcp_client(settings.gateway_url, settings.region)
             with client:
-                tools.extend(client.list_tools_sync())
+                tools.extend(
+                    tool
+                    for tool in client.list_tools_sync()
+                    if tool.tool_name.endswith("get_support_hours")
+                )
                 agent = Agent(
                     model=model,
                     system_prompt=SYSTEM_PROMPT,

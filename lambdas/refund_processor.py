@@ -27,6 +27,11 @@ def lambda_handler(event, context):
 
     tool_name = _tool_name(context or SimpleNamespace(client_context=None))
     try:
+        if tool_name == "get_support_hours":
+            return {
+                "statusCode": 200,
+                "body": '{"timezone":"America/New_York","hours":"Monday–Friday, 09:00–17:00"}',
+            }
         if tool_name == "initiate_refund":
             order_id = str(event.get("order_id", "")).upper()
             amount = Decimal(str(event.get("amount", 0)))
@@ -40,10 +45,7 @@ def lambda_handler(event, context):
                     order_id=order_id,
                     status="APPROVED",
                     amount=amount,
-                    message=(
-                        "Simulated refund approved; a real credit would take "
-                        "3–5 business days."
-                    ),
+                    message=("Simulated refund approved; a real credit would take 3–5 business days."),
                     created_at=datetime.now(UTC),
                 ),
             )
@@ -51,9 +53,7 @@ def lambda_handler(event, context):
             refund_id = str(event.get("refund_id", "")).upper()
             if not refund_id:
                 raise ValueError("refund_id is required")
-            return _response(
-                200, RefundStatus(refund_id=refund_id, status="PROCESSING", eta="2–3 business days")
-            )
+            return _response(200, RefundStatus(refund_id=refund_id, status="PROCESSING", eta="2–3 business days"))
         if tool_name == "get_return_label":
             order_id = str(event.get("order_id", "")).upper()
             if not order_id:

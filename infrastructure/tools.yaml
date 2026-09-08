@@ -264,6 +264,17 @@ Resources:
             LambdaArn: !GetAtt RefundFunction.Arn
             ToolSchema:
               InlinePayload:
+                - Name: get_support_hours
+                  Description: Get the public operating hours for CircuitCare human support.
+                  InputSchema:
+                    Type: object
+                    Properties: {}
+                  OutputSchema:
+                    Type: object
+                    Properties:
+                      timezone: {Type: string}
+                      hours: {Type: string}
+                    Required: [timezone, hours]
                 - Name: initiate_refund
                   Description: Initiate a simulated refund for an order and amount.
                   InputSchema:

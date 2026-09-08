@@ -27,4 +27,6 @@ aws bedrock-agent list-knowledge-bases --max-results 1 >/dev/null
 aws s3vectors list-vector-buckets --max-results 1 >/dev/null
 aws lambda list-functions --max-items 1 >/dev/null
 aws apigateway get-rest-apis --limit 1 >/dev/null
+aws cognito-idp list-user-pools --max-results 1 >/dev/null
+aws dynamodb list-tables --limit 1 >/dev/null
 echo "AWS preflight passed in us-east-1."

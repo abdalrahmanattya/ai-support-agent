@@ -10,7 +10,11 @@ if [[ ! -x "${uv_bin}" ]]; then
 fi
 
 "${uv_bin}" lock
-"${uv_bin}" sync --frozen --all-groups
+"${uv_bin}" sync --python 3.13 --frozen --all-groups --extra api
+if [[ -f "${project_dir}/apps/web/package-lock.json" ]]; then
+  npm --prefix "${project_dir}/apps/web" ci --silent --cache "${project_dir}/.tools/npm-cache"
+  npm --prefix "${project_dir}/apps/web" run build
+fi
 rm -rf "${build_dir}/runtime" "${build_dir}/lambda"
 mkdir -p "${build_dir}/runtime" "${build_dir}/lambda/lambdas" "${build_dir}/lambda/support_agent"
 

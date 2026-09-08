@@ -1,0 +1,62 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CircuitCare seeded-demo identity boundary.
+
+Parameters:
+  CallbackUrl:
+    Type: String
+    Default: http://127.0.0.1:8000/auth/callback
+
+Resources:
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: ai-support-agent-users
+      UsernameAttributes: [email]
+      AutoVerifiedAttributes: [email]
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+      Schema:
+        - Name: customer_id
+          AttributeDataType: String
+          Mutable: false
+          StringAttributeConstraints: {MinLength: "1", MaxLength: "40"}
+      UserPoolTags:
+        Project: ai-support-agent
+        Environment: dev
+
+  LocalClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: circuitcare-local-portal
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows: [code]
+      AllowedOAuthScopes: [openid, email, profile]
+      CallbackURLs: [!Ref CallbackUrl]
+      LogoutURLs: [http://127.0.0.1:8000/]
+      SupportedIdentityProviders: [COGNITO]
+      PreventUserExistenceErrors: ENABLED
+      EnableTokenRevocation: true
+      RefreshTokenValidity: 1
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub circuitcare-${AWS::AccountId}-${AWS::Region}
+      UserPoolId: !Ref UserPool
+
+  StaffGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: support-staff
+      Description: CircuitCare support specialists
+      UserPoolId: !Ref UserPool
+
+Outputs:
+  UserPoolId:
+    Value: !Ref UserPool
+  CognitoClientId:
+    Value: !Ref LocalClient
+  CognitoDomain:
+    Value: !Sub ${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com
