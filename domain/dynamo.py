@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import boto3
@@ -14,7 +15,10 @@ from .repository import ConflictError
 
 class DynamoRepository:
     def __init__(self, table_name: str, resource: Any | None = None) -> None:
-        self.table = (resource or boto3.resource("dynamodb")).Table(table_name)
+        self.table = (
+            resource
+            or boto3.resource("dynamodb", region_name=os.getenv("AWS_REGION", "us-east-1"))
+        ).Table(table_name)
 
     def _query(self, pk: str, prefix: str) -> list[dict[str, Any]]:
         return self.table.query(KeyConditionExpression=Key("pk").eq(pk) & Key("sk").begins_with(prefix))["Items"]
