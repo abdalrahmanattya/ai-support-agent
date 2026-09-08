@@ -54,6 +54,14 @@ As of 2026-09-08, all four `ai-support-agent-*` stacks are deployed in `us-east-
 
 The diagram shows currently deployed resources; no planned resources are presented as deployed.
 
+## Live verification
+
+See [LIVE_TEST_LOG.md](LIVE_TEST_LOG.md) for sanitized transcripts of successful
+AgentCore CLI, Gateway API, Gateway Lambda, Browser, cross-session Memory,
+Knowledge Base, and Code Interpreter invocations. Design decisions, a concrete
+deployment challenge, and production considerations are documented in
+[REFLECTION.md](REFLECTION.md).
+
 ### Prerequisites and credentials
 
 Install the following locally:
