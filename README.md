@@ -37,7 +37,8 @@ Runtime hosts the Python agent; Bedrock supplies language reasoning; the Knowled
 
 ## Cloud resources and deployment method
 
-The infrastructure is separated by lifecycle and failure domain:
+The last deployed architecture separated infrastructure by lifecycle and failure
+domain:
 
 ```mermaid
 flowchart TB
@@ -50,9 +51,18 @@ flowchart TB
 
 The four templates are independently deployable. A runtime failure therefore does not recreate the long-lived knowledge, memory, or tool resources. The artifact bucket is private, encrypted, versioned, and retained by CloudFormation.
 
-As of 2026-09-08, all four `ai-support-agent-*` stacks are deployed in `us-east-1`. Knowledge ingestion and live Runtime, Gateway, Knowledge Base, Memory, Browser, Code Interpreter, and AgentCore CLI checks have succeeded. This dated status does not guarantee later availability.
+On 2026-09-08, all four `ai-support-agent-*` stacks were removed from
+`us-east-1`, together with the retained artifact bucket and service-created log
+groups. No project cloud resources are currently deployed. Before teardown,
+knowledge ingestion and live Runtime, Gateway, Knowledge Base, Memory, Browser,
+Code Interpreter, and AgentCore CLI checks succeeded; the preserved verification
+records document that deployment rather than current availability.
 
-The diagram shows currently deployed resources; no planned resources are presented as deployed.
+No resources are currently deployed; any planned redeployment must use the
+documented deployment procedure and a separately authorized AWS environment.
+
+The diagram shows the previously verified deployment architecture. It is not a
+claim that those resources are currently deployed.
 
 ## Live verification
 
@@ -193,4 +203,7 @@ Gateway and Runtime use IAM authorization; no unauthenticated customer endpoint 
 
 This is a backend reference service, not a chat UI. Business data and actions are simulated, human escalation has no ticketing integration, and the knowledge corpus is small. Production use would also require privacy review, evaluations, rate limits, abuse controls, and a formal retention policy.
 
-Deployed resources may incur charges for inference, Runtime, Memory, Gateway, Browser, Code Interpreter, Knowledge Base, S3/S3 Vectors, Lambda, API Gateway, and CloudWatch. Delete the four stacks and retained artifact bucket when they are no longer needed.
+A future deployment may incur charges for inference, Runtime, Memory, Gateway,
+Browser, Code Interpreter, Knowledge Base, S3/S3 Vectors, Lambda, API Gateway,
+and CloudWatch. Use the ordered removal procedure above when it is no longer
+needed.
