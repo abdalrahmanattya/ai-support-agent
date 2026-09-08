@@ -62,6 +62,13 @@ Knowledge Base, and Code Interpreter invocations. Design decisions, a concrete
 deployment challenge, and production considerations are documented in
 [REFLECTION.md](REFLECTION.md).
 
+Visual evidence:
+
+- [AgentCore CLI invocation](verification/agentcore-cli.png)
+- [API- and Lambda-backed Gateway tools](verification/gateway-tools.png)
+- [Browser live-page retrieval](verification/browser-live-page.png)
+- [Cross-session Memory recall](verification/memory-cross-session.png)
+
 ### Prerequisites and credentials
 
 Install the following locally:

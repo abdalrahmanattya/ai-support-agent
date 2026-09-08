@@ -6,7 +6,13 @@ preserved, while AWS account IDs, ARNs, resource endpoints, request IDs, and
 local paths are omitted. All customers and commerce records shown here are
 fictional.
 
+The images below are terminal-style renderings of these sanitized live
+transcripts. They preserve the tested commands, tool names, response content,
+and success status without publishing deployment identifiers.
+
 ## AgentCore CLI invocation
+
+![Successful AgentCore CLI invocation](verification/agentcore-cli.png)
 
 ```text
 $ agentcore invoke --runtime ai_support_agent --target development \
@@ -24,6 +30,8 @@ $ agentcore invoke --runtime ai_support_agent --target development \
 ```
 
 ## Gateway tool 1: API-based order lookup
+
+![API- and Lambda-backed Gateway tool invocations](verification/gateway-tools.png)
 
 ```text
 Session: 41111111-1111-4111-8111-[redacted]
@@ -73,6 +81,8 @@ does not perform a real financial transaction.
 
 ## Browser retrieval from a live page
 
+![Browser retrieving content from a live AWS documentation page](verification/browser-live-page.png)
+
 ```text
 Session: 43333333-3333-4333-8333-[redacted]
 User: Use the Browser tool to visit
@@ -95,6 +105,8 @@ Runtime result: statusCode=200, contentType=application/json
 ```
 
 ## Cross-session memory recall
+
+![Two sessions demonstrating cross-session Memory recall](verification/memory-cross-session.png)
 
 Both invocations use customer `CUST-EVIDENCE-20260908`, but their session IDs
 are different.
